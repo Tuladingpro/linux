@@ -160,14 +160,13 @@ fi
 
 mariadb_zabbix_server_net(){
     mysql -uzabbix -predhat -e "show databases;" | grep zabbix
-    if [[ $? -ne 0 ]];then
-        mysql -uroot -predhat -e "drop database zabbix;"
-        mysql -uroot -predhat -e "create database zabbix character set utf8 collate utf8_bin;"
-        mysql -uroot -predhat -e "grant all on zabbix.* to 'zabbix'@'localhost' identified by 'redhat';"
-        mysql -uroot -predhat -e "flush privileges;"
-        zcat /usr/share/doc/zabbix-server-mysql-4.0.24/create.sql.gz | mysql -uzabbix -predhat zabbix
-        systemctl restart mariadb
-    fi
+    mysql -uroot -predhat -e "drop database zabbix;"
+    mysql -uroot -predhat -e "create database zabbix character set utf8 collate utf8_bin;"
+    mysql -uroot -predhat -e "grant all on zabbix.* to 'zabbix'@'localhost' identified by 'redhat';"
+    mysql -uroot -predhat -e "flush privileges;"
+    zcat /usr/share/doc/zabbix-server-mysql-4.0.24/create.sql.gz | mysql -uzabbix -predhat zabbix
+    systemctl restart mariadb
+    
 }
 
 zabbix_serverset(){
