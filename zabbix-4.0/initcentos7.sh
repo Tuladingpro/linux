@@ -159,8 +159,8 @@ fi
 }
 
 mariadb_zabbix_server_net(){
-    mysql -uzabbix -predhat -e "show databases;" | grep zabbix
-    mysql -uroot -predhat -e "drop database zabbix;"
+    mysql -uzabbix -predhat -e "show databases;" | grep zabbix &> /dev/null
+    mysql -uroot -predhat -e "drop database zabbix;" &> /dev/null
     mysql -uroot -predhat -e "create database zabbix character set utf8 collate utf8_bin;"
     mysql -uroot -predhat -e "grant all on zabbix.* to 'zabbix'@'localhost' identified by 'redhat';"
     mysql -uroot -predhat -e "flush privileges;"
