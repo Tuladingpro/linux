@@ -1,6 +1,18 @@
 #!/bin/bash
-#It's a script for initialization on Centos 7 which installed minimal.
+#It's a script for zabbix 4.0 initialization on Centos 7 which installed minimal.
 #You should connect with Internet if you want use this script.
+# Author  : Shamhunter <nkuzhangshn@gmail.com>
+# Date    : Fri Sep 11 10:38:03 AM CST 2020
+# URL GitHub  : https://github.com/shamhunter/archinstall
+# URL Blog    : https://www.onethinker.top/
+# Log file    : /tmp/zabbixinstall.log
+
+
+###########color###########
+SUCCESS="echo -en \e[1;32m"
+FAILURE="echo -en \e[1;31m"
+NORMAL="echo -en \e[0m"
+[[ ! -e /tmp/zabbixinstall.log ]] && LOGPATH=/tmp/zabbixinstall.log
 shopt -s extglob
 if [[ ! "${USER}" == root ]];then
     echo "Please use root to run this script"
@@ -180,7 +192,11 @@ zabbix_serverset(){
     systemctl restart httpd
 }
 
-read -p "If you have set base option finished, you should input [n/N] to continue and other to exit : " baseaction
+zabbixserver_localinstall(){
+    
+}
+
+read -p "If you have set base option finished, you should input [n/N] to continue setup base option and other input to exit(just go to set zabbix) : " baseaction
 case ${baseaction} in
     +([nN]))
         basemain
