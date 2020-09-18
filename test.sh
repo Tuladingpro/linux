@@ -1,5 +1,10 @@
 #!/bin/bash
 LANG=en_US.UTF-8
+# If you want to change the image version of your cobbler server
+# Please chage below variables
+osver=centos76
+cobbleriso_path="/media/centos76"
+cobbleriso_name="centos76"
 yesnobox(){
     if (whiptail --title "Choose Yes/No Box" --yes-button "Yes" --no-button "No"  --yesno "Please confirm which option you choose." 10 60) then
         echo "You chose Skittles Exit status was $?."
@@ -76,17 +81,21 @@ fi
 
 LEVEL2_MENU1(){
 OPTION2_1=$(whiptail --title "Initialzation" --checklist \
-"Please choose one or more options you want to set ：" 25 60 4 \
+"Please choose one or more options you want to set ：" 25 60 6 \
 "01" "network init" OFF \
 "02" "hostname set" OFF \
 "03" "local yum repository" OFF \
-"04" "net yum repository" OFF 3>&1 1>&2 2>&3)
+"04" "net yum repository" OFF \
+"05" "base option (firewalld,selinux)" OFF \
+"06" "aliyun docker speed" OFF 3>&1 1>&2 2>&3)
 local exitstatus=$?
 if [ $exitstatus = 0 ]; then
     [[ ${OPTION2_1} =~ "01" ]] && netinit
     [[ ${OPTION2_1} =~ "02" ]] && hostinit
     [[ ${OPTION2_1} =~ "03" ]] && localyum
     [[ ${OPTION2_1} =~ "04" ]] && netyum
+    [[ ${OPTION2_1} =~ "05" ]] && baseoption
+    [[ ${OPTION2_1} =~ "06" ]] && aliyundocker
 else
     LEVEL1_MENU
 fi
@@ -180,12 +189,10 @@ if [[ ${exitstatus} -eq 0 ]]; then
         tmpname=$(hostnamectl | grep "hostname" |cut -d: -f2 | sed 's#^ ##')
         grep "${tmpname}" /etc/hosts &>/dev/null || echo "${ipdefault} ${tmpname}" >> /etc/hosts
         msgbox_msg "hostname"
-        echo 33
         break
     else
         hostinit
     fi
-    echo 44
     break
 else
     LEVEL2_MENU1
@@ -194,8 +201,6 @@ fi
 }
 
 localyum(){
-osver=centos76
-echo t01
 rm -rf /etc/yum.repos.d/*
 cat > /etc/yum.repos.d/my.repo << EOF
 [localyum]
@@ -205,22 +210,115 @@ enabled=1
 gpgcheck=0
 EOF
 [[ ! -e "/media/$osver" ]] && mkdir -p /media/$osver
-echo t02
 fstab=$(sed -n '/sr0/p' /etc/fstab)
 if [[ ! -n "${fstab}" ]];then
    echo "/dev/sr0 /media/$osver iso9660 defaults 0 0" >> /etc/fstab
-   mount -a
+   mount -a &> /dev/null
 else
     echo "Fstab had been setup!"
 fi
-    yum clean all && yum makecache
-    yum install -y vim bash-completion wget curl tree sysstat
-    yum install -y yum-utils
+    yum clean all && yum makecache &>/dev/null
+    yum install -y vim bash-completion wget curl tree sysstat &>/dev/null
+    yum install -y yum-utils &>/dev/null
     source /etc/profile.d/bash_completion.sh
 }
 
 netyum(){
-    echo
+    wget -O /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-7.repo
+    sed -i -e '/mirrors.cloud.aliyuncs.com/d' -e '/mirrors.aliyuncs.com/d' /etc/yum.repos.d/CentOS-Base.repo
+    yum-config-manager --add-repo http://mirrors.aliyun.com/repo/epel-7.repo
+    yum clean all && yum makecache
+}
+
+baseoption(){
+systemctl disable firewalld --now
+sed -i '/SELINUX=/cSELINUX=disabled' /etc/selinux/config
+setenforce 0
+pslogo=$(sed -n '/export PS1=/p'  /root/.bashrc)
+if [[ -z "${pslogo}" ]];then
+    echo "export PS1='\[\e[32;40m\][\u@\h \W] > \[\e[0m\]'" >> /root/.bashrc
+    source /root/.bashrc
+fi
+}
+
+aliyundocker(){
+    mkdir -p /etc/docker
+    tee /etc/docker/daemon.json <<-'EOF'
+{
+  "registry-mirrors": ["https://y5wbw67l.mirror.aliyuncs.com"]
+}
+EOF
+systemctl daemon-reload
+systemctl restart docker
+}
+
+LEVEL2_MENU2(){
+    cobblerinstall
+}
+cobblerinstall(){
+    epelcheck=$(yum repolist | grep 'epel')
+    repocheck=$(yum repolist |tail -1 |sed -r 's#([^[:digit:]]*)([[:digit:]]+)#\2#;s/,//')
+    if [[ ${repocheck} -eq 0 || ! -n ${epelcheck}  ]];then
+        echo "Error! Please configure your repository firstly."
+        exit
+    else
+        yum -y install cobbler cobbler-web tftp-server dhcp httpd xinetd
+        systemctl enable httpd cobblerd --now
+        [[ $? -ne 0 ]] && echo "Error! Please recheck your epel repository!"
+    fi
+    sed -ri '/allow_dynamic_settings:/c\allow_dynamic_settings: 1' /etc/cobbler/settings 
+    systemctl restart cobblerd httpd 
+    sed -ri '/^manage_dhcp: 0/cmanage_dhcp: 1' /etc/cobbler/settings 
+    sed -ri '/^server:/cserver: 192.168.122.254' /etc/cobbler/settings  
+    sed -ri '/^next_server:/cnext_server: 192.168.122.254' /etc/cobbler/settings   
+    sed -i '/SELINUX=/cSELINUX=disabled' /etc/selinux/config    
+    sed -ri 's/(disable)(.*)(yes)/\1\2no/' /etc/xinetd.d/tftp   
+    /usr/bin/cobbler get-loaders
+    systemctl enable rsyncd --now   
+    yum -y install pykickstart 
+    yum -y install fence-agents 
+    passwddefault=$(openssl passwd -1 -salt `openssl rand -hex 4` 'redhat')
+    cobbler setting edit --name=default_password_crypted --value="$passwddefault"
+    #systemctl restart cobblerd httpd && cobbler sync
+    cobbler check | grep -v debmirror| grep -E '[0-9]'
+    cobblercheck=$?
+    if [[ ${cobblercheck} -eq 0 ]];then
+        echo "You should check your cobbler configuration, there is still some errors!"
+    else
+        echo "Successfully!"
+    fi
+    cobbler_dhcp
+    cobbler_iso
+}
+
+cobbler_dhcp(){
+    SUBNET="192.168.122.0"
+    NETMASK="255.255.255.0"
+    GATEWAY="192.168.122.1"
+    RANGEL="192.168.122.100"
+    RANGER="192.168.122.253"
+    sed -ri "s/subnet .*\{/subnet ${SUBNET} netmask ${NETMASK} \{/" /etc/cobbler/dhcp.template
+    sed -ri "s/(^ *.*subnet-mask)( *)([0-9]+.*)$/\1\2${NETMASK};/" /etc/cobbler/dhcp.template
+    sed -ri "s/(^ *.*dynamic-bootp)( +)([.[:digit:]]+)( +)(.*);$/\1\2${RANGEL}\4${RANGER};/" /etc/cobbler/dhcp.template
+    systemctl restart cobblerd 
+    wait
+    sleep 2
+    cobbler sync
+}
+
+cobbler_iso(){
+    [[ ! -e "${cobbleriso_path}" ]] && mkdir -p ${cobbleriso_path}
+    if [[ -e "${cobbleriso_path}" ]];then
+        cobbler import --path="${cobbleriso_path}" --name="${cobbleriso_name}" --arch=x86_64
+        kickstartfile=$(cobbler profile report --name="${cobbleriso_name}-x86_64" | grep -w 'Kickstart  '|awk '{print $3}')
+        wait
+        kickstartpath=$(echo ${kickstartfile} |sed -nr 's/[._[:alpha:]]+$//p')
+        cp ${kickstartfile} "${kickstartpath}${cobbleriso_name}.ks"
+    else
+        echo "Please check your repository ! Some errors occurred!"
+    fi
+
+
 }
 
 INITMAIN(){
@@ -230,3 +328,6 @@ INITMAIN(){
 #yesnobox
 #LEVEL2_MENU1
 LEVEL1_MENU
+
+#cobbler_iso
+
