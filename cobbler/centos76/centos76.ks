@@ -6,12 +6,22 @@
 auth  --useshadow  --enablemd5
 # System bootloader configuration
 bootloader --location=mbr
+#changed
 # Partition clearing information
 clearpart --all --initlabel
+part pv.01 --size=1 --grow --ondisk=vdb
+part pv.02 --size=1 --grow --ondisk=vdc
+part /boot --fstype=xfs --ondisk=vda --size=500
+part swap --fstype=swap --ondisk=vda --size=1024
+volgroup vgtest pv.01 pv.02
+logvol / --fstype=xfs --name=lv_root --vgname=vgtest --size=5000
+logvol /home --fstype=xfs --name=lv_home --vgname=vgtest --size=4096
+logvol /tmp --fstype=xfs --name=lv_tmp --vgname=vgtest --size=9192
 # Use text mode install
 text
+#changed
 # Firewall configuration
-firewall --enabled
+firewall --disabled
 # Run the Setup Agent on first boot
 firstboot --disable
 # System keyboard
@@ -53,6 +63,13 @@ $SNIPPET('pre_anamon')
 
 %packages
 $SNIPPET('func_install_if_enabled')
+#changed
+@core
+@base
+tree
+nmap
+vim
+telnet
 %end
 
 %post --nochroot
@@ -76,4 +93,8 @@ $SNIPPET('post_anamon')
 # Start final steps
 $SNIPPET('kickstart_done')
 # End final steps
+
+#changed
+sed -ri "/^#UseDNS/c\UseDNS no" /etc/ssh/sshd_config
+
 %end
