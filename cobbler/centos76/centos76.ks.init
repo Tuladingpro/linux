@@ -9,23 +9,15 @@ bootloader --location=mbr
 #changed
 # Partition clearing information
 clearpart --all --initlabel
-#part pv.01 --size=20000 --grow --ondisk=vda
+part pv.01 --size=20000 --grow --ondisk=vda
 #part pv.02 --size=15000 --grow --ondisk=vdc
-#part /boot --fstype=xfs --ondisk=vda --size=500
-#part swap --fstype=swap --ondisk=vda --size=2048
-#volgroup vgtest pv.01 pv.02
-#volgroup vgtest pv.01
-#logvol /home --fstype=xfs --name=lv_home --vgname=vgtest --size=5000
-#logvol / --fstype=xfs --name=lv_root --vgname=vgtest --grow --size=8192
-
 part /boot --fstype=xfs --ondisk=vda --size=500
 part swap --fstype=swap --ondisk=vda --size=2048
-part pv.01 --size=10000 --grow --ondisk=vda
+#volgroup vgtest pv.01 pv.02
 volgroup vgtest pv.01
-logvol /home --fstype=xfs --name=lv_home --vgname=vgtest --size=5000
-logvol / --fstype=xfs --name=lv_root --vgname=vgtest --grow --size=8192
-
-#Use text mode install
+logvol /home --fstype=xfs --name=lv_home --vgname=vgtest --size=8192
+logvol / --fstype=xfs --name=lv_root --vgname=vgtest --grow --size=5000
+# Use text mode install
 text
 #changed
 # Firewall configuration

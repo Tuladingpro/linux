@@ -1,7 +1,7 @@
 #!/bin/bash
 LANG=en_US.UTF-8
 # If you want to change the image version of your cobbler server
-# Please chage below variables
+# Please change  variables under cobblerinstall
 osver=centos76
 cobbleriso_path="/media/centos76"
 cobbleriso_name="centos76"
@@ -266,6 +266,8 @@ cobblerinstall(){
         systemctl enable httpd cobblerd --now
         [[ $? -ne 0 ]] && echo "Error! Please recheck your epel repository!"
     fi
+    #防止循环pxe安装
+    sed -i 's/pxe_just_once: 0/pxe_just_once: 1/' /etc/cobbler/settings
     sed -ri '/allow_dynamic_settings:/c\allow_dynamic_settings: 1' /etc/cobbler/settings 
     systemctl restart cobblerd httpd 
     sed -ri '/^manage_dhcp: 0/cmanage_dhcp: 1' /etc/cobbler/settings 
@@ -289,6 +291,7 @@ cobblerinstall(){
     fi
     cobbler_dhcp
     cobbler_iso
+    cobbler_kickstart
 }
 
 cobbler_dhcp(){
@@ -310,17 +313,34 @@ cobbler_iso(){
     [[ ! -e "${cobbleriso_path}" ]] && mkdir -p ${cobbleriso_path}
     if [[ -e "${cobbleriso_path}" ]];then
         cobbler import --path="${cobbleriso_path}" --name="${cobbleriso_name}" --arch=x86_64
-        kickstartfile=$(cobbler profile report --name="${cobbleriso_name}-x86_64" | grep -w 'Kickstart  '|awk '{print $3}')
+        local kickstartfile=$(cobbler profile report --name="${cobbleriso_name}-x86_64" | grep -w 'Kickstart  '|awk '{print $3}')
+        local kickstartpath=$(echo ${kickstartfile} |sed -nr 's/[._[:alnum:]]+$//p')
         wait
-        kickstartpath=$(echo ${kickstartfile} |sed -nr 's/[._[:alpha:]]+$//p')
+        if [[ ! -e "${kickstartpath}${cobbleriso_name}.ks" ]];then
         cp ${kickstartfile} "${kickstartpath}${cobbleriso_name}.ks"
+        fi
     else
         echo "Please check your repository ! Some errors occurred!"
     fi
-
-
 }
 
+cobbler_kickstart(){
+    local kickstartfile=$(cobbler profile report --name="${cobbleriso_name}-x86_64" | grep -w 'Kickstart  '|awk '{print $3}')
+    echo ${kickstartfile}
+    local kickstartpath=$(echo ${kickstartfile} |sed -nr 's/[._[:alnum:]]+$//p')
+    cobbler profile edit --name="${cobbleriso_name}-x86_64" --kickstart="${kickstartpath}${cobbleriso_name}.ks"
+    wait
+    local nowfile=$(cobbler profile report --name="${cobbleriso_name}-x86_64" | grep -w 'Kickstart  '|awk '{print $3}')
+    local kickstartjudge=$(cobbler profile report --name="${cobbleriso_name}-x86_64" | grep -w 'Kickstart  '|awk '{print $3}')
+    if [[ ${nowfile} == ${kickstartjudge} ]];then
+       systemctl restart cobblerd
+       wait
+       sleep 2
+       cobbler sync
+    else
+        echo "Some errors occurred when setting default profile!"
+    fi
+}
 INITMAIN(){
     echo    
 }
