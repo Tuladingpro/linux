@@ -7,10 +7,12 @@ shopt -s extglob
 
 osversion(){
 osver=rhel76
+rpmpath=/rhel76-rpms/Packages/
 cobbleriso_path="/media/rhel76"
 cobbleriso_name="rhel76"
 }
-
+mysqlinit=0
+nicfailcount=0
 yesnobox(){
     if (whiptail --title "Choose Yes/No Box" --yes-button "Yes" --no-button "No"  --yesno "Please confirm which option you choose." 10 60) then
         echo "You chose Skittles Exit status was $?."
@@ -24,6 +26,7 @@ msgbox_msg(){
         "nicfail")
             nicmsg_suc=$(whiptail --title "Message box" \
             --msgbox "Please recheck the NIC name!" 30 80 3>&1 1>&2 2>&3)
+            nicfailcount+=1
             netinit
             ;;
         "ipsuc")
@@ -109,6 +112,7 @@ fi
 
 ipinit(){
 local exitstatus=$1
+[[ ${nicfailcount} -ge 2 ]] && netdev=${nicname}
 if [[ $exitstatus == "0" && ${nicname} =~ ${netdev} ]]; then  
     while true
     do
@@ -165,7 +169,7 @@ done
 }
 
 netinit(){
-netdev=($(nmcli d | grep -E "connected|unmanaged|disconnected" | awk '{print $1}' | sed '/lo/d' ))
+netdev=$(nmcli d | grep -E "connected|unmanaged|disconnected" | awk '{print $1}' | sed '/lo/d' )
 
 nicname=$(whiptail --title "Please check your network device below" \
     --inputbox "Which nic will you want use? 
@@ -360,12 +364,95 @@ cobbler_kickstart(){
         echo "Some errors occurred when setting default profile!"
     fi
 }
-INITMAIN(){
-    echo    
+
+LEVEL2_MENU3(){
+    zabbix_initset
+}
+
+zabbix_initset(){
+scp admin@192.168.122.1:~/gitcode/linux/rhel76-rpms.iso /root/
+
+if [[ -s /etc/yum.repos.d/my.repo ]];then
+    grep "localyum" /etc/yum.repos.d/my.repo
+    if [[ $? -eq 0 ]];then
+        grep "zacobbler" /etc/yum.repos.d/my.repo
+        if [[ $? -ne 0 ]];then
+            [[ ! -e "/media/$rpmpath" ]] && mkdir -p /media/$rpmpath && mount -t loop /root/rhel76-rpms.iso /media/$rpmpath
+            cat >> /etc/yum.repos.d/my.repo << EOF
+[zacobbler]
+name=zacobbler
+baseurl=file:///media/$rpmpath
+enabled=1
+gpgcheck=0
+EOF
+            yum clean all && yum makecache &>/dev/null
+        else
+            break
+        fi
+    else
+        echo "Please check your repo !"
+    fi
+else
+        echo "Please check your repo !"
+fi
+
+    yum install -y mariadb-server zabbix-server-mysql zabbix-web-mysql
+    wait
+    sleep 2
+    systemctl enable mariadb --now
+    zabbix_server_install
+    
+}
+
+
+
+zabbix_server_install(){
+    mariadb_init
+    sed -i "s/#ServerName www.example.com:80/ServerName 127.0.0.1:80/g" /etc/httpd/conf/httpd.conf
+    sed -i "s/max_execution_time = 30/max_execution_time = 300/g" /etc/php.ini
+    sed -i "s/max_input_time = 60/max_input_time = 600/g" /etc/php.ini
+    sed -i "s/post_max_size = 8M/post_max_size = 16M/g" /etc/php.ini
+    sed -i "s/;date.timezone =/date.timezone = Asia\/Shanghai/g" /etc/php.ini
+    sed -i "s/# DBPassword=/DBPassword=redhat/" /etc/zabbix/zabbix_server.conf
+    systemctl enable zabbix-server --now
+    systemctl restart httpd
+
+}
+
+mariadb_init(){
+systemctl enable mariadb --now
+mysql -uroot -predhat -e "show databases;"
+[[ $? -eq 0 ]] && mysqlinit+=1 || mysqlinit=0
+if [[ ${mysqlinit} -eq 0 ]];then
+mysql_secure_installation << EOF
+
+
+redhat
+redhat
+y
+n
+y
+y
+EOF
+mysqlinit+=1
+fi
+
+mysql -uzabbix -predhat -e "show databases;" | grep zabbix
+if [[ $? -ne 0 ]] ;then
+systemctl restart mariadb
+mysql -uroot -predhat -e "create database zabbix character set utf8 collate utf8_bin;"
+mysql -uroot -predhat -e "grant all on zabbix.* to 'zabbix'@'localhost' identified by 'redhat';"
+mysql -uroot -predhat -e "flush privileges;"
+zcat /usr/share/doc/zabbix-server-mysql-4.0.24/create.sql.gz | mysql -uzabbix -predhat zabbix
+systemctl restart mariadb
+else
+mysql -uroot -predhat -e "drop database zabbix;"
+mariadb_init
+fi
+
 }
 
 osversion
 LEVEL1_MENU
 
-#cobbler_iso
 

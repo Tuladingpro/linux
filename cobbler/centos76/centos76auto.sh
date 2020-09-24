@@ -1,5 +1,6 @@
 #!/bin/bash
 LANG=en_US.UTF-8
+shopt -s extglob
 # If you want to change the image version of your cobbler server
 # Please change  variables under cobblerinstall
 # DHCP of cobbler : cobbler_dhcp
@@ -10,6 +11,7 @@ cobbleriso_path="/media/centos76"
 cobbleriso_name="centos76"
 }
 
+nicfailcount=0
 yesnobox(){
     if (whiptail --title "Choose Yes/No Box" --yes-button "Yes" --no-button "No"  --yesno "Please confirm which option you choose." 10 60) then
         echo "You chose Skittles Exit status was $?."
@@ -23,6 +25,7 @@ msgbox_msg(){
         "nicfail")
             nicmsg_suc=$(whiptail --title "Message box" \
             --msgbox "Please recheck the NIC name!" 30 80 3>&1 1>&2 2>&3)
+            nicfailcount+=1
             netinit
             ;;
         "ipsuc")
@@ -108,6 +111,7 @@ fi
 
 ipinit(){
 local exitstatus=$1
+[[ ${nicfailcount} -ge 2 ]] && netdev=${nicname}
 if [[ $exitstatus == "0" && ${nicname} =~ ${netdev} ]]; then  
     while true
     do
@@ -164,7 +168,7 @@ done
 }
 
 netinit(){
-netdev=($(nmcli d | grep -E "connected|unmanaged|disconnected" | awk '{print $1}' | sed '/lo/d' ))
+netdev=$(nmcli d | grep -E "connected|unmanaged|disconnected" | awk '{print $1}' | sed '/lo/d' )
 
 nicname=$(whiptail --title "Please check your network device below" \
     --inputbox "Which nic will you want use? 
@@ -229,10 +233,23 @@ fi
 }
 
 netyum(){
-    wget -O /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-7.repo
-    sed -i -e '/mirrors.cloud.aliyuncs.com/d' -e '/mirrors.aliyuncs.com/d' /etc/yum.repos.d/CentOS-Base.repo
-    yum-config-manager --add-repo http://mirrors.aliyun.com/repo/epel-7.repo
-    yum clean all && yum makecache
+    osversion
+    case ${osver} in
+        centos7[0-9])
+            echo "You choosed ${osver} !"
+            wget -O /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-7.repo
+            sed -i -e '/mirrors.cloud.aliyuncs.com/d' -e '/mirrors.aliyuncs.com/d' /etc/yum.repos.d/CentOS-Base.repo
+            yum-config-manager --add-repo http://mirrors.aliyun.com/repo/epel-7.repo
+            yum clean all && yum makecache
+            ;;
+        rhel7[0-9])
+            echo "You choosed ${osver} ! Maybe you have no subscripitions for RHEL ! Please recheck and download some rpm packages just in this registory for dependency!"
+            localyum
+            ;;
+        *)
+            break
+            ;;
+        esac
 }
 
 baseoption(){
