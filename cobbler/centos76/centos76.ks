@@ -9,15 +9,23 @@ bootloader --location=mbr
 #changed
 # Partition clearing information
 clearpart --all --initlabel
-part pv.01 --size=1 --grow --ondisk=vdb
-part pv.02 --size=1 --grow --ondisk=vdc
+#part pv.01 --size=20000 --grow --ondisk=vda
+#part pv.02 --size=15000 --grow --ondisk=vdc
+#part /boot --fstype=xfs --ondisk=vda --size=500
+#part swap --fstype=swap --ondisk=vda --size=2048
+#volgroup vgtest pv.01 pv.02
+#volgroup vgtest pv.01
+#logvol /home --fstype=xfs --name=lv_home --vgname=vgtest --size=5000
+#logvol / --fstype=xfs --name=lv_root --vgname=vgtest --grow --size=8192
+
 part /boot --fstype=xfs --ondisk=vda --size=500
-part swap --fstype=swap --ondisk=vda --size=1024
-volgroup vgtest pv.01 pv.02
-logvol / --fstype=xfs --name=lv_root --vgname=vgtest --size=5000
-logvol /home --fstype=xfs --name=lv_home --vgname=vgtest --size=4096
-logvol /tmp --fstype=xfs --name=lv_tmp --vgname=vgtest --size=9192
-# Use text mode install
+part swap --fstype=swap --ondisk=vda --size=2048
+part pv.01 --size=10000 --grow --ondisk=vda
+volgroup vgtest pv.01
+logvol /home --fstype=xfs --name=lv_home --vgname=vgtest --size=5000
+logvol / --fstype=xfs --name=lv_root --vgname=vgtest --grow --size=8192
+
+#Use text mode install
 text
 #changed
 # Firewall configuration
@@ -34,6 +42,9 @@ url --url=$tree
 $yum_repo_stanza
 # Network information
 $SNIPPET('network_config')
+#network --bootproto=static --device=bond0 --bondslaves=eth0,eth1 --hostname=autotest --ip=192.168.122.66 --netmask=255.255.255.0 --gateway=192.168.122.1 --nameserver=192.168.122.1 --bondopts=mode=active-backup;miimon=100
+#change
+#netset
 # Reboot after installation
 reboot
 
@@ -51,7 +62,7 @@ install
 # Clear the Master Boot Record
 zerombr
 # Allow anaconda to partition the system as needed
-autopart
+#autopart
 
 %pre
 $SNIPPET('log_ks_pre')
@@ -61,9 +72,9 @@ $SNIPPET('pre_install_network_config')
 $SNIPPET('pre_anamon')
 %end
 
+#changed
 %packages
 $SNIPPET('func_install_if_enabled')
-#changed
 @core
 @base
 tree
