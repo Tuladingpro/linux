@@ -290,9 +290,14 @@ cobblerinstall(){
         [[ $? -ne 0 ]] && echo "Error! Please recheck your epel repository!"
     fi
     #防止循环pxe安装
+    yum -y install pykickstart 
+    yum -y install fence-agents 
     sed -i 's/pxe_just_once: 0/pxe_just_once: 1/' /etc/cobbler/settings
     sed -ri '/allow_dynamic_settings:/c\allow_dynamic_settings: 1' /etc/cobbler/settings 
+    cobbler sync
     systemctl restart cobblerd httpd 
+    passwddefault=$(openssl passwd -1 -salt `openssl rand -hex 4` 'redhat')
+    cobbler setting edit --name=default_password_crypted --value="$passwddefault"
     sed -ri '/^manage_dhcp: 0/cmanage_dhcp: 1' /etc/cobbler/settings 
     sed -ri '/^server:/cserver: 192.168.122.254' /etc/cobbler/settings  
     sed -ri '/^next_server:/cnext_server: 192.168.122.254' /etc/cobbler/settings   
@@ -300,11 +305,8 @@ cobblerinstall(){
     sed -ri 's/(disable)(.*)(yes)/\1\2no/' /etc/xinetd.d/tftp   
     /usr/bin/cobbler get-loaders
     systemctl enable rsyncd --now   
-    yum -y install pykickstart 
-    yum -y install fence-agents 
-    passwddefault=$(openssl passwd -1 -salt `openssl rand -hex 4` 'redhat')
-    cobbler setting edit --name=default_password_crypted --value="$passwddefault"
-    #systemctl restart cobblerd httpd && cobbler sync
+    cobbler sync
+    systemctl restart cobblerd httpd xinetd
     cobbler check | grep -v debmirror| grep -E '[0-9]'
     cobblercheck=$?
     if [[ ${cobblercheck} -eq 0 ]];then
